@@ -13,6 +13,9 @@
 #
 # Load required packages
 #
+
+##### Need to install the latest version of packages using install.packages() to meet version requirement
+
 library("ecmwfr")
 library("sf")
 
@@ -26,13 +29,27 @@ if (packageVersion("ecmwfr") < "1.5.0"   | packageVersion("sf") < "1.0.16" ) {
 # directory for reading in Global Administrative boundaries and for outputting
 # the ERA5 rasters queried in this script.
 #
-ecmw_dir <- ""
+ecmw_dir <- "YOUR LOCAL PATH"
 
 # Set key for web API. See the *Use: Copernicus Climate Data Store (CDS)* heading
 # in the GitHub linked above for details on accessing these parameters. Note:
 # your user ID and API key should never be shared externally.
 #
-wf_set_key(service = "cds", user = "", key = "")
+
+##### Do these steps:
+##### 1. Create an ECMWF account by self-registering. Follow https://github.com/bluegreen-labs/ecmwfr?tab=readme-ov-file
+##### under section "Use: ECMWF Data Store services".
+##### 2. Visit user profile to get user ID and key. Follow https://github.com/bluegreen-labs/ecmwfr?tab=readme-ov-file
+##### under section "Use: ECMWF Data Store services".
+##### 3. Visit user profile to accept the terms and conditions in the profile page. 
+##### 4. Go to ERA-5 land page following https://github.com/bluegreen-labs/ecmwfr?tab=readme-ov-file
+##### under section "Data Requests". Go to "Terms of use" block to accept the data licence to use products.
+##### 5. Visit user profile page again to double check that Dataset licences to use Copernicus products shows up there and 
+##### has been accepted. 
+
+##### You can also only put key in this function. It will find the corresponding USER ID internally.
+
+wf_set_key(user = "YOUR USER ID", key = "YOUR PERSONAL ACCESS TOKEN")
 
 # Read in Kenya boundaries geopackage. These data were downloaded from GADM
 # https://gadm.org/download_country.html. The layer specification "ADM_ADM_0"
@@ -41,7 +58,10 @@ wf_set_key(service = "cds", user = "", key = "")
 # extent that should be queried from ERA5, so ward-level boundaries are not 
 # needed.
 #
-kenya <- st_read(paste0(ecmw_dir, "Kenya_GADM/gadm41_KEN.gpkg"), layer = "ADM_ADM_0")
+
+##### Need to first create a subfolder "Kenya_GADM" on your path, and put gadm41_KEN.gpkg file in that subfolder.
+
+kenya <- st_read(paste0(ecmw_dir, "/", "Kenya_GADM/gadm41_KEN.gpkg"), layer = "ADM_ADM_0")
 
 # Assess bounding box. The bounding box represents the coordinates of the 
 # extent of the shapefile, and will be used to specify the area we would like
@@ -141,10 +161,11 @@ for (yr in query_years) {
     # Submit Request
     #
     req_kenya <- wf_request(
-      user     = "<add_user_id>",   # user ID (for authentification)
+      user     = "YOUR USER ID",   # user ID (for authentification)
       request  = request_era,  # the request
       transfer = TRUE,     # download the file
-      path     = paste0(ecmw_dir, "ERA5_Out/")       # store data in current working directory
+      path     = paste0(ecmw_dir, "/", "ERA5_Out/")       ##### Need to create "ERA5_Out" subfolder on your path 
+                                                          # store data in current working directory
     )
     
   }
@@ -152,7 +173,7 @@ for (yr in query_years) {
 
 
 # The ERA5 data is distributed in UTC. We want to calculate our daily measures
-# based on Kenya local time. To accomodate this, we will query the last three 
+# based on Kenya local time. To accommodate this, we will query the last three 
 # hours of 1999 as Kenya is 3 hours ahead of UTC
 #
 request_era_1999 <- list(
@@ -169,8 +190,9 @@ request_era_1999 <- list(
 # Submit Request
 #
 req_kenya <- wf_request(
-  user     = "<add_user_id>",   # user ID (for authentification)
+  user     = "YOUR USER ID",   # user ID (for authentification)
   request  = request_era_1999,  # the request
   transfer = TRUE,     # download the file
-  path     = paste0(ecmw_dir, "ERA5_Out/")         # store data in current working directory
+  path     = paste0(ecmw_dir, "/", "ERA5_Out/")           ##### Need to create "ERA5_Out" subfolder on your path
+                                                          # store data in current working directory
 )

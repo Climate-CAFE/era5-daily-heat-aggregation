@@ -33,6 +33,8 @@
 ## 4) Estimate the ward-level exposure to ERA5, accounting for the availability
 ##    of data within the wards (this file).
 
+##### Need to install the latest version of packages using install.packages() to meet version requirement
+
 library("terra")  # For raster data
 library("sf")     # For vector data
 library("plyr")   # For data management
@@ -62,19 +64,26 @@ if (packageVersion("terra") < "1.5.34"   | packageVersion("sf") < "1.0.7" |
 
 # Set up directories to read in and output data
 #
-geo_dir <- ""
-era_dir <- ""
-outdir <- ""
+
+era_dir <- "YOUR LOCAL PATH TO CREATED FISHNET SHAPE FILE"
+geo_dir <- "YOUR LOCAL PATH"
+outdir <- "YOUR LOCAL PATH"
 
 # %%%%%%%%%%%%%%%%%%%%%% LOAD WARDS SHAPEFILE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 #
 # Read in wards shapefile
 #
-kenya_wards <- st_read(paste0(geo_dir, "gadm41_KEN_3.shp"))
+
+##### Go to https://gadm.org/download_country.html, download Kenya shapefile,
+##### put level-3 shapefiles in geo_dir. Must put all level-3 shapefiles in 
+##### that folder. Cannot just put a single .shp file in it. 
+
+
+kenya_wards <- st_read(paste0(geo_dir, "/", "gadm41_KEN_3.shp"))
 
 # Read in the fishnet created previously
 #
-era_fishnet <- st_read(paste0(era_dir, "era_fishnet.shp"))
+era_fishnet <- st_read(paste0(era_dir, "/", "era_fishnet.shp"))
 
 # Match the CRS of the wards shapefile to the fishnet and era data and confirm match
 #
@@ -257,11 +266,15 @@ for (year in c(years_to_agg)) {
   
   # Stack all of the daily files by year
   #
-  era_files_yr <- paste0(era_dir, era_files_yr)
+  era_files_yr <- paste0(era_dir, "/", era_files_yr)
   era_stack <- rast(era_files_yr)
   
   # Reset times to align with Kenya time zones
   #
+  ####################
+  # CODE CANNOT WORK #
+  ####################
+  
   terra::time(era_stack) <- with_tz(terra::time(era_stack) , tzone = "Africa/Nairobi")
   
   # Subset stack to exclude the times that run past specified year due to 
@@ -270,7 +283,11 @@ for (year in c(years_to_agg)) {
   #
   era_stack <- subset(era_stack, time(era_stack) < date(paste0(year + 1, "-01-01")) &
                             time(era_stack) >= date(paste0(year, "-01-01")))
-
+  
+  ####################
+  # CODE CANNOT WORK #
+  ####################
+  
   # Our ERA stack includes three variables (2m dew point temperature,
   # skin temperature, and 2m temperature). Create subsets to perform
   # daily aggregation on
@@ -304,8 +321,16 @@ for (year in c(years_to_agg)) {
   names(era_stack_hti) <- paste0("hti", substr(names(era_stack_hti), 4, 10))
   names(era_stack_hum) <- paste0("hum", substr(names(era_stack_hum), 4, 10))
   
+  ####################
+  # CODE CANNOT WORK #
+  ####################
+  
   terra::time(era_stack_hti) <- terra::time(era_stack_d2m)
   terra::time(era_stack_hum) <- terra::time(era_stack_d2m)
+  
+  ####################
+  # CODE CANNOT WORK #
+  ####################
   
   # Confirm all layers are same length
   #
@@ -322,6 +347,9 @@ for (year in c(years_to_agg)) {
   
   # Create a time sequence starting from January first of the year date
   #
+  
+  ##### Unknown tz="EAT" ? 
+  
   start_date <- as.POSIXct(paste0(year, "-01-01 00:00"), tz = "EAT")
   time_seq <- seq(from = start_date, by = "hour", length.out = layer_n)
 
@@ -654,6 +682,6 @@ for (year in c(years_to_agg)) {
   
   # Output results by year to output directory
   #
-  saveRDS(finaloutput, paste0(outdir, "kenya_agg_era5_", year, "_d2m_t2m_skt_hti_hum.rds"))
+  saveRDS(finaloutput, paste0(outdir, "/", "kenya_agg_era5_", year, "_d2m_t2m_skt_hti_hum.rds"))
   
 }
