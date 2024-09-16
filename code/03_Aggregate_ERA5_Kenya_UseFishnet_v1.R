@@ -1,7 +1,8 @@
 # Date Created: 8/16/2024
 # Version Number: v1
-# Date Modified: 
-# Modifications:
+# Date Modified: 9/16/2024
+# Modifications: Edited based on difference in storage of time in new CDS
+#                Beta API. Reduced direct references to Kenya
 # ************************************************************** #
 # ~~~~~  ERA5 Re-Analysis Raster Processing Step 2        ~~~~~~ #
 # ************************************************************** #
@@ -42,6 +43,7 @@ library("doBy")   # For aggregation of data across groups
 library("tidyverse") # For data management
 library("lwgeom")
 library("weathermetrics")
+library("lubridate")
 
 sf_use_s2(FALSE) 
 # S2 is for computing distances, areas, etc. on a SPHERE (using
@@ -57,7 +59,7 @@ sf_use_s2(FALSE)
 
 # Check package version numbers
 #
-if (packageVersion("terra") < "1.5.34"   | packageVersion("sf") < "1.0.7" | 
+if (packageVersion("terra") < "1.7.78"   | packageVersion("sf") < "1.0.7" | 
     packageVersion("plyr")  < "1.8.7"    |
     packageVersion("doBy")  < "4.6.19"   | packageVersion("lwgeom") < "0.2.8") {
   cat("WARNING: packages are outdated and may result in errors.") }
@@ -74,12 +76,19 @@ outdir <- "YOUR LOCAL PATH"
 # Read in wards shapefile
 #
 
-##### Go to https://gadm.org/download_country.html, download Kenya shapefile,
-##### put level-3 shapefiles in geo_dir. Must put all level-3 shapefiles in 
-##### that folder. Cannot just put a single .shp file in it. 
+##### Go to https://gadm.org/download_country.html, download a country shapefile.
+##### Downloading as a gpkg will embed multiple layers of shapefiles. A single
+##### layer can be read in based on the "layer =" input. Here, we want to use 
+##### the administrative boundaries at which the final metrics will be available.
+##### We use the smallest boundaries available here (level 3) for Kenya
 
+country_wards <- st_read(paste0(geo_dir, "/", "gadm41_KEN.gpkg"), layer = "ADM_ADM_3")
 
-kenya_wards <- st_read(paste0(geo_dir, "/", "gadm41_KEN_3.shp"))
+# Rename geom column to geometry if necessary, to align with fishnet
+#
+if (!("geometry" %in% names(country_wards))) {
+  country_wards <- country_wards %>% rename(geometry = geom)
+}
 
 # Read in the fishnet created previously
 #
@@ -87,11 +96,11 @@ era_fishnet <- st_read(paste0(era_dir, "/", "era_fishnet.shp"))
 
 # Match the CRS of the wards shapefile to the fishnet and era data and confirm match
 #
-kenya_wards <- st_transform(kenya_wards, crs = st_crs(era_fishnet))
+country_wards <- st_transform(country_wards, crs = st_crs(era_fishnet))
 
 # Run check to ensure CRS are equal
 #
-if (!isTRUE(all.equal(st_crs(kenya_wards), st_crs(era_fishnet)))) {
+if (!isTRUE(all.equal(st_crs(country_wards), st_crs(era_fishnet)))) {
   cat("ERROR: CRS's don't match \n")  } else { cat(":) CRS's match \n") }
 
 # %%%%%%%%%%%%%%%%%% CREATE UNION BETWEEN FISHNET AND WARDS %%%%%%%%% #
@@ -109,12 +118,12 @@ my_union <- function(a,b) {
 
 # Ensure geometries are valid
 #
-kenya_wards <- st_make_valid(kenya_wards) 
+country_wards <- st_make_valid(country_wards) 
 era_fishnet <- st_make_valid(era_fishnet)
 
 # Create the union between the fishnet and blocks layers
 #
-fishnetward <- my_union(era_fishnet, kenya_wards)
+fishnetward <- my_union(era_fishnet, country_wards)
 fishnetward$UniqueID <- 1:dim(fishnetward)[1]
 
 # Automated QC -- Check to see if the union has introduced any geometry errors
@@ -157,8 +166,13 @@ if (class(check)[1] == "try-error") {
 #                       that will be used for aggregation (here Kenya wards). 
 #                       Note that these variable names may change
 #                       depending on the version and country used. 
+# Specify name of the geographic identifier in your administrative boundary data
 #
-geo_id_var <- names(fishnetward)[grep("^GID_3", names(fishnetward), ignore.case = TRUE)]
+geo_name <- "GID_3"
+
+# Extract name from dataset
+#
+geo_id_var <- names(fishnetward)[grep(paste0("^", geo_name), names(fishnetward), ignore.case = TRUE)]
 
 # Identify the polygons of the fishnet that do not intersect with the ward
 # data; drop them.
@@ -235,7 +249,7 @@ extraction_pts <- terra::vect(extraction_pts)
 #
 # %%%%%%%%%%%%%%%%%%%%%%%%%%% READ IN THE ERA5 RASTER DATA %%%%%%%%%%%%%%%%%% #
 #
-era_files <- list.files(era_dir, pattern=paste0('.*.nc'), full.names = F)
+era_files <- list.files(paste0(era_dir, "/", "ERA5_Hourly/"), pattern=paste0('.*.nc'), full.names = F)
 
 # Humidex function from heatmetrics package:
 # Reference: K.R. Spangler, S. Liang, and G.A. Wellenius. "Wet-Bulb Globe 
@@ -251,6 +265,18 @@ humidex <- function(t, td) {
   return(hx)
 }
 
+# Time zone specification. 
+# The SpatRaster as downloaded from Copernicus will include hourly data based on
+# the UTC time zone. When we calculate our daily summary statistics in the loop
+# below, we want to make sure we are calculating statistics from midnight to
+# midnight, using the local time zone. Specify the time zone relevant for your 
+# data below. Note: If you are attempting to aggregate across multiple distinct
+# time zones, additional processing is necessary. This capability is in development
+# for an additional version of this process. To see a list of all time zones,
+# run: OlsonNames()
+#
+tz_country <- "Africa/Nairobi"
+
 # Set year to process
 #
 years_to_agg <- c(2000:2023)
@@ -261,21 +287,20 @@ for (year in c(years_to_agg)) {
   
   # Subset to year from all files 
   #
-  era_files_yr <- era_files[substr(era_files, 12, 15) == year |
-                              substr(era_files, 12, 15) == year - 1]
+  era_files_yr <- era_files[grepl(year, era_files) | grepl(year - 1, era_files) ]
   
   # Stack all of the daily files by year
   #
-  era_files_yr <- paste0(era_dir, "/", era_files_yr)
+  era_files_yr <- paste0(era_dir, "/", "ERA5_Hourly", "/", era_files_yr)
   era_stack <- rast(era_files_yr)
   
-  # Reset times to align with Kenya time zones
+  # Add time dimension (NA when downloaded in current API configuration)
   #
-  ####################
-  # CODE CANNOT WORK #
-  ####################
+  terra::time(era_stack) <- as_datetime(as.numeric(substr(names(era_stack), 16, 28)))
   
-  terra::time(era_stack) <- with_tz(terra::time(era_stack) , tzone = "Africa/Nairobi")
+  # Reset times to align with specified time zone
+  #
+  terra::time(era_stack) <- with_tz(terra::time(era_stack) , tzone = tz_country)
   
   # Subset stack to exclude the times that run past specified year due to 
   # time zone adjustment, and to exclude the previous year that was read in 
@@ -283,11 +308,7 @@ for (year in c(years_to_agg)) {
   #
   era_stack <- subset(era_stack, time(era_stack) < date(paste0(year + 1, "-01-01")) &
                             time(era_stack) >= date(paste0(year, "-01-01")))
-  
-  ####################
-  # CODE CANNOT WORK #
-  ####################
-  
+
   # Our ERA stack includes three variables (2m dew point temperature,
   # skin temperature, and 2m temperature). Create subsets to perform
   # daily aggregation on
@@ -321,16 +342,8 @@ for (year in c(years_to_agg)) {
   names(era_stack_hti) <- paste0("hti", substr(names(era_stack_hti), 4, 10))
   names(era_stack_hum) <- paste0("hum", substr(names(era_stack_hum), 4, 10))
   
-  ####################
-  # CODE CANNOT WORK #
-  ####################
-  
   terra::time(era_stack_hti) <- terra::time(era_stack_d2m)
   terra::time(era_stack_hum) <- terra::time(era_stack_d2m)
-  
-  ####################
-  # CODE CANNOT WORK #
-  ####################
   
   # Confirm all layers are same length
   #
@@ -347,10 +360,7 @@ for (year in c(years_to_agg)) {
   
   # Create a time sequence starting from January first of the year date
   #
-  
-  ##### Unknown tz="EAT" ? 
-  
-  start_date <- as.POSIXct(paste0(year, "-01-01 00:00"), tz = "EAT")
+  start_date <- as.POSIXct(paste0(year, "-01-01 00:00"), tz = tz_country)
   time_seq <- seq(from = start_date, by = "hour", length.out = layer_n)
 
   # Convert our time sequence to a factor format. This will allow for use as 
@@ -682,6 +692,6 @@ for (year in c(years_to_agg)) {
   
   # Output results by year to output directory
   #
-  saveRDS(finaloutput, paste0(outdir, "/", "kenya_agg_era5_", year, "_d2m_t2m_skt_hti_hum.rds"))
+  saveRDS(finaloutput, paste0(outdir, "/", "country_agg_era5_", year, "_d2m_t2m_skt_hti_hum.rds"))
   
 }
