@@ -9,9 +9,10 @@
 #       processing raster data onto polygon boundaries:
 #       https://github.com/Climate-CAFE/population_weighting_raster_data/blob/main/Population_Weighting_Raster_to_Census_Units.R
 #     
-## Purpose: Process ERA5 rasters to Kenya administrative boundaries (wards). This
+## Purpose: Process ERA5 rasters to administrative boundaries. This
 ##    script is the first in a two-step raster processing process. In this 
 ##    a grid-based polygon will be derived from the raster grid of ERA5 data.
+##    An example is provided for Kenya data.
 ##    
 ## Overall Processing Steps:
 ##    Script: 02_Aggregate_ERA5_Kenya_SetFishnet_v1.R
@@ -21,13 +22,14 @@
 ##    without the large computational burden of a terra::zonal loop (as below)
 ##
 ##    Script: 03_Aggregate_ERA5_Kenya_UseFishnet_v1.R
-## 2) Load Kenya wards
+## 2) Load administrative boundaries
 ## 3) Create extraction points from the union of the block and fishnet. These 
 ##    are what we can use to extract values from the raster that overlaps with
 ##    with the points aligning to each block (next file).
 ## 4) Estimate the ward-level exposure to ERA5, accounting for the availability
 ##    of data within the block (next file).
 
+##### Need to install the latest version of packages using install.packages() to meet version requirement
 
 library("terra")  # For raster data
 library("sf")     # For vector data
@@ -36,6 +38,7 @@ library("doBy")
 library("tidyverse")
 library("tidycensus")
 library("lwgeom")
+
 sf_use_s2(FALSE)  
 # S2 is for computing distances, areas, etc. on a SPHERE (using
 # geographic coordinates, i.e., lat/lon in decimal-degrees); no need for this
@@ -58,9 +61,9 @@ if (packageVersion("terra") < "1.5.34"   | packageVersion("sf") < "1.0.7" |
 # %%%%%%%%%%%%%%%%%%%%%%% USER-DEFINED PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # Set up directories to read in and output data
 #
-era_dir <- ""
-geo_dir <- ""
-outdir <- ""
+
+era_dir <- "YOUR LOCAL PATH TO DOWNLOADED .NC FILES"
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 # %%%%%%%%%%%%%%%%%%%%%% CREATE ERA5 EXTRACTION POINTS  %%%%%%%%%%%%%%%%%%%%%% #
@@ -72,7 +75,7 @@ era_files <- list.files(era_dir, pattern=paste0('.*.nc'), full.names = F)
 
 # Stack all of the hourly files by year
 #
-era_files <- paste0(era_dir, era_files)
+era_files <- paste0(era_dir, "/", era_files)
 era_stack <- rast(era_files)
 
 # %%%%%%%%%%%%%%%%%%%% CREATE A FISHNET GRID OF THE RASTER EXTENT %%%%%%%%%%%% #
@@ -108,7 +111,7 @@ era_fishnet <- st_make_grid(era_matrix, n = c(era_cols, era_rows),
 
 # Write fishnet to output for use in later scripts
 #
-st_write(era_fishnet, paste0(era_dir, "era_fishnet.shp"), append = FALSE)
+st_write(era_fishnet, paste0(era_dir, "/", "era_fishnet.shp"), append = FALSE)
 
 # Automated QC check -- confirm same coordinate reference system (CRS) between
 #                       the fishnet and ERA5 raster
