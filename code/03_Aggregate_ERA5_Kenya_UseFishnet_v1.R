@@ -249,7 +249,7 @@ extraction_pts <- terra::vect(extraction_pts)
 #
 # %%%%%%%%%%%%%%%%%%%%%%%%%%% READ IN THE ERA5 RASTER DATA %%%%%%%%%%%%%%%%%% #
 #
-era_files <- list.files(paste0(era_dir, "/", "ERA5_Hourly/"), pattern=paste0('.*.nc'), full.names = F)
+era_files <- list.files(paste0(era_dir, "/"), pattern=paste0('.*.nc'), full.names = F)
 
 # Humidex function from heatmetrics package:
 # Reference: K.R. Spangler, S. Liang, and G.A. Wellenius. "Wet-Bulb Globe 
@@ -291,7 +291,7 @@ for (year in c(years_to_agg)) {
   
   # Stack all of the daily files by year
   #
-  era_files_yr <- paste0(era_dir, "/", "ERA5_Hourly", "/", era_files_yr)
+  era_files_yr <- paste0(era_dir, "/", era_files_yr)
   era_stack <- rast(era_files_yr)
   
   # Add time dimension (NA when downloaded in current API configuration)
